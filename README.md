@@ -335,6 +335,14 @@ python3 -m http.server 8000
 | **💲 Price Benchmark** | Opening Price | Trade using daily opening price |
 | **📝 Recording Method** | JSONL Format | Complete trading history records |
 
+### 📊 Risk & Quality Metrics
+
+AI-Trader now summarizes each run with risk-aware KPIs derived from stored positions and price history:
+
+- **Cumulative / annualized return** and **max drawdown** from the equity curve.
+- **Annualized volatility**, **Sharpe**, and **Sortino** ratios.
+- **Turnover** estimation from day-to-day position changes, plus a warning when price history is missing for any trade date.
+
 ## ⚙️ Configuration Guide
 
 ### 📋 Configuration File Structure
@@ -351,7 +359,11 @@ python3 -m http.server 8000
       "name": "claude-3.7-sonnet",
       "basemodel": "anthropic/claude-3.7-sonnet",
       "signature": "claude-3.7-sonnet",
-      "enabled": true
+      "enabled": true,
+      "agent_overrides": {
+        "max_steps": 20,
+        "base_delay": 0.75
+      }
     }
   ],
   "agent_config": {
@@ -375,6 +387,9 @@ python3 -m http.server 8000
 | `max_retries` | Maximum retry attempts | 3 |
 | `base_delay` | Operation delay (seconds) | 1.0 |
 | `initial_cash` | Initial capital | $10,000 |
+| `agent_overrides` | Per-model override of agent_config values | `{}` |
+
+**Validation rules**: configuration files are now checked for required fields (dates, model signatures/basemodels, numeric agent settings). Invalid structures abort the run with a descriptive error message so issues surface before trading starts.
 
 ### 📊 Data Format
 
