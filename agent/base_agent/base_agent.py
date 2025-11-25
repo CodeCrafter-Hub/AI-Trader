@@ -21,6 +21,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from tools.general_tools import extract_conversation, extract_tool_messages, get_config_value, write_config_value
+from tools.performance_metrics import build_performance_report
 from tools.price_tools import add_no_trade_record
 from prompts.agent_prompt import get_agent_system_prompt, STOP_SIGNAL
 
@@ -121,6 +122,7 @@ class BaseAgent:
         # Data paths
         self.data_path = os.path.join(self.base_log_path, self.signature)
         self.position_file = os.path.join(self.data_path, "position", "position.jsonl")
+        self.data_dir = Path(__file__).resolve().parents[2] / "data"
         
     def _get_default_mcp_config(self) -> Dict[str, Dict[str, Any]]:
         """Get default MCP configuration"""
@@ -437,6 +439,19 @@ class BaseAgent:
             "latest_date": latest_position.get("date"),
             "positions": latest_position.get("positions", {}),
             "total_records": len(positions)
+        }
+
+    def get_performance_report(self) -> Optional[Dict[str, Any]]:
+        """Build and return performance report based on stored positions"""
+        report = build_performance_report(Path(self.position_file), self.data_dir)
+        if report is None:
+            return None
+
+        metrics = report.metrics
+        return {
+            "metrics": metrics,
+            "missing_price_days": report.missing_price_days,
+            "last_equity": report.equity_curve[-1].total_value if report.equity_curve else None,
         }
     
     def __str__(self) -> str:

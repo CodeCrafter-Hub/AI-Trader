@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
+from typing import Dict, List
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -18,6 +19,103 @@ AGENT_REGISTRY = {
         "class": "BaseAgent"
     },
 }
+
+
+def _validate_date(date_str: str, field_name: str, errors: List[str]) -> None:
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        errors.append(f"{field_name} must be in YYYY-MM-DD format (received {date_str})")
+
+
+def _validate_agent_config(config: Dict, errors: List[str]) -> None:
+    if not isinstance(config, dict):
+        errors.append("agent_config must be an object")
+        return
+
+    numeric_fields = [
+        ("max_steps", 1),
+        ("max_retries", 1),
+        ("base_delay", 0),
+        ("initial_cash", 0),
+    ]
+    for field, min_value in numeric_fields:
+        value = config.get(field)
+        if value is None:
+            errors.append(f"agent_config missing required field '{field}'")
+            continue
+        if not isinstance(value, (int, float)) or value < min_value:
+            errors.append(f"agent_config field '{field}' must be >= {min_value} (received {value})")
+
+
+def _validate_models(models: List[Dict], errors: List[str]) -> None:
+    if not isinstance(models, list) or not models:
+        errors.append("models must be a non-empty list")
+        return
+
+    seen_signatures = set()
+    for idx, model in enumerate(models):
+        prefix = f"models[{idx}]"
+        if not isinstance(model, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        signature = model.get("signature")
+        basemodel = model.get("basemodel")
+        if not signature:
+            errors.append(f"{prefix} is missing 'signature'")
+        elif signature in seen_signatures:
+            errors.append(f"Duplicate model signature detected: {signature}")
+        else:
+            seen_signatures.add(signature)
+        if not basemodel:
+            errors.append(f"{prefix} is missing 'basemodel'")
+
+        overrides = model.get("agent_overrides", {})
+        if overrides and not isinstance(overrides, dict):
+            errors.append(f"{prefix}.agent_overrides must be an object when provided")
+
+
+def validate_config(config: Dict) -> None:
+    errors: List[str] = []
+
+    if not isinstance(config, dict):
+        raise ValueError("Configuration must be a JSON object")
+
+    date_range = config.get("date_range", {})
+    if not isinstance(date_range, dict):
+        errors.append("date_range must be an object")
+    else:
+        _validate_date(date_range.get("init_date", ""), "date_range.init_date", errors)
+        _validate_date(date_range.get("end_date", ""), "date_range.end_date", errors)
+
+    _validate_agent_config(config.get("agent_config", {}), errors)
+
+    log_config = config.get("log_config", {})
+    if not isinstance(log_config, dict):
+        errors.append("log_config must be an object")
+    elif not isinstance(log_config.get("log_path", ""), str):
+        errors.append("log_config.log_path must be a string")
+
+    _validate_models(config.get("models", []), errors)
+
+    enabled_models = [m for m in config.get("models", []) if isinstance(m, dict) and m.get("enabled", True)]
+    if not enabled_models:
+        errors.append("At least one model must be enabled")
+
+    agent_type = config.get("agent_type")
+    if not agent_type:
+        errors.append("agent_type is required")
+    elif agent_type not in AGENT_REGISTRY:
+        errors.append(f"Unsupported agent_type '{agent_type}'. Supported types: {', '.join(AGENT_REGISTRY)}")
+
+    if errors:
+        raise ValueError("\n - " + "\n - ".join(errors))
+
+
+def _merge_agent_config(base: Dict, overrides: Dict) -> Dict:
+    merged = {**base}
+    merged.update({k: v for k, v in overrides.items() if v is not None})
+    return merged
 
 
 def get_agent_class(agent_type):
@@ -93,13 +191,19 @@ def load_config(config_path=None):
 
 async def main(config_path=None):
     """Run trading experiment using BaseAgent class
-    
+
     Args:
         config_path: Configuration file path, if None use default config
     """
     # Load configuration file
     config = load_config(config_path)
-    
+
+    try:
+        validate_config(config)
+    except ValueError as e:
+        print(f"❌ Configuration validation failed:\n{e}")
+        exit(1)
+
     # Get Agent type
     agent_type = config.get("agent_type", "BaseAgent")
     try:
@@ -129,34 +233,51 @@ async def main(config_path=None):
  
     # Get model list from configuration file (only select enabled models)
     enabled_models = [
-        model for model in config["models"] 
+        model for model in config["models"]
         if model.get("enabled", True)
     ]
-    
+
+    if not enabled_models:
+        print("❌ No enabled models found in configuration")
+        exit(1)
+
     # Get agent configuration
     agent_config = config.get("agent_config", {})
     log_config = config.get("log_config", {})
-    max_steps = agent_config.get("max_steps", 10)
-    max_retries = agent_config.get("max_retries", 3)
-    base_delay = agent_config.get("base_delay", 0.5)
-    initial_cash = agent_config.get("initial_cash", 10000.0)
-    
+
     # Display enabled model information
     model_names = [m.get("name", m.get("signature")) for m in enabled_models]
-    
+
     print("🚀 Starting trading experiment")
     print(f"🤖 Agent type: {agent_type}")
     print(f"📅 Date range: {INIT_DATE} to {END_DATE}")
     print(f"🤖 Model list: {model_names}")
-    print(f"⚙️  Agent config: max_steps={max_steps}, max_retries={max_retries}, base_delay={base_delay}, initial_cash={initial_cash}")
+    print(
+        "⚙️  Base agent config: max_steps={max_steps}, max_retries={max_retries}, base_delay={base_delay}, initial_cash={initial_cash}".format(
+            max_steps=agent_config.get("max_steps"),
+            max_retries=agent_config.get("max_retries"),
+            base_delay=agent_config.get("base_delay"),
+            initial_cash=agent_config.get("initial_cash"),
+        )
+    )
                     
     for model_config in enabled_models:
         # Read basemodel and signature directly from configuration file
         model_name = model_config.get("name", "unknown")
         basemodel = model_config.get("basemodel")
         signature = model_config.get("signature")
-        openai_base_url = model_config.get("openai_base_url",None)
-        openai_api_key = model_config.get("openai_api_key",None)
+        openai_base_url = model_config.get("openai_base_url", None)
+        openai_api_key = model_config.get("openai_api_key", None)
+        merged_agent_config = _merge_agent_config(agent_config, model_config.get("agent_overrides", {}))
+        validation_errors: List[str] = []
+        _validate_agent_config(merged_agent_config, validation_errors)
+        if validation_errors:
+            print(f"❌ Invalid agent_overrides for {model_name}: {'; '.join(validation_errors)}")
+            continue
+        max_steps = merged_agent_config.get("max_steps", 10)
+        max_retries = merged_agent_config.get("max_retries", 3)
+        base_delay = merged_agent_config.get("base_delay", 0.5)
+        initial_cash = merged_agent_config.get("initial_cash", 10000.0)
 
         # Validate required fields
         if not basemodel:
@@ -170,6 +291,8 @@ async def main(config_path=None):
         print(f"🤖 Processing model: {model_name}")
         print(f"📝 Signature: {signature}")
         print(f"🔧 BaseModel: {basemodel}")
+        if model_config.get("agent_overrides"):
+            print(f"⚙️  Overrides: {model_config.get('agent_overrides')}")
         
         # Initialize runtime configuration
         write_config_value("SIGNATURE", signature)
@@ -203,14 +326,28 @@ async def main(config_path=None):
             print("✅ Initialization successful")
             # Run all trading days in date range
             await agent.run_date_range(INIT_DATE, END_DATE)
-            
+
             # Display final position summary
             summary = agent.get_position_summary()
             print(f"📊 Final position summary:")
             print(f"   - Latest date: {summary.get('latest_date')}")
             print(f"   - Total records: {summary.get('total_records')}")
             print(f"   - Cash balance: ${summary.get('positions', {}).get('CASH', 0):.2f}")
-            
+
+            performance_report = agent.get_performance_report()
+            if performance_report:
+                metrics = performance_report["metrics"]
+                print("📈 Performance metrics:")
+                print(f"   - Cumulative return: {metrics.get('cumulative_return', 0):.2%}")
+                print(f"   - Annualized return: {metrics.get('annualized_return', 0):.2%}")
+                print(f"   - Max drawdown: {metrics.get('max_drawdown', 0):.2%}")
+                print(f"   - Volatility: {metrics.get('volatility', 0):.2%}")
+                print(f"   - Sharpe ratio: {metrics.get('sharpe_ratio', 0):.2f}")
+                print(f"   - Sortino ratio: {metrics.get('sortino_ratio', 0):.2f}")
+                print(f"   - Turnover: {metrics.get('turnover', 0):.2%}")
+                if performance_report.get("missing_price_days"):
+                    print(f"   - Missing price data on: {performance_report['missing_price_days']}")
+
         except Exception as e:
             print(f"❌ Error processing model {model_name} ({signature}): {str(e)}")
             print(f"📋 Error details: {e}")
