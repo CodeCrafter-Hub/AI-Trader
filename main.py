@@ -29,6 +29,10 @@ def _validate_date(date_str: str, field_name: str, errors: List[str]) -> None:
 
 
 def _validate_agent_config(config: Dict, errors: List[str]) -> None:
+    if not isinstance(config, dict):
+        errors.append("agent_config must be an object")
+        return
+
     numeric_fields = [
         ("max_steps", 1),
         ("max_retries", 1),
@@ -93,6 +97,10 @@ def validate_config(config: Dict) -> None:
         errors.append("log_config.log_path must be a string")
 
     _validate_models(config.get("models", []), errors)
+
+    enabled_models = [m for m in config.get("models", []) if isinstance(m, dict) and m.get("enabled", True)]
+    if not enabled_models:
+        errors.append("At least one model must be enabled")
 
     agent_type = config.get("agent_type")
     if not agent_type:
@@ -228,6 +236,10 @@ async def main(config_path=None):
         model for model in config["models"]
         if model.get("enabled", True)
     ]
+
+    if not enabled_models:
+        print("❌ No enabled models found in configuration")
+        exit(1)
 
     # Get agent configuration
     agent_config = config.get("agent_config", {})

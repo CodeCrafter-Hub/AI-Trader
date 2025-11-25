@@ -389,7 +389,7 @@ AI-Trader now summarizes each run with risk-aware KPIs derived from stored posit
 | `initial_cash` | Initial capital | $10,000 |
 | `agent_overrides` | Per-model override of agent_config values | `{}` |
 
-**Validation rules**: configuration files are now checked for required fields (dates, model signatures/basemodels, numeric agent settings). Invalid structures abort the run with a descriptive error message so issues surface before trading starts.
+**Validation rules**: configuration files are now checked for required fields (dates, model signatures/basemodels, numeric agent settings). At least one model entry must be enabled, and `agent_config` must remain an object (not a string/array) even when you rely on per-model overrides. Invalid structures abort the run with a descriptive error message so issues surface before trading starts.
 
 ### 📊 Data Format
 

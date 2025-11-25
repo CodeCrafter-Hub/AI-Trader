@@ -87,6 +87,8 @@ def _compute_equity_curve(
 
     for record in position_records:
         date = record.get("date")
+        if not date:
+            continue
         positions = record.get("positions", {})
         missing: List[str] = []
         total_value = 0.0
@@ -144,18 +146,36 @@ def _compute_turnover(position_records: List[dict], price_cache: Dict[str, Dict[
         for symbol, curr_amount in curr_positions.items():
             if symbol == "CASH":
                 continue
-            prev_amount = prev_positions.get(symbol, 0)
-            delta = curr_amount - prev_amount
-            if not delta:
+            try:
+                prev_amount = float(prev_positions.get(symbol, 0))
+                curr_val = float(curr_amount)
+            except (TypeError, ValueError):
+                continue
+
+            delta = curr_val - prev_amount
+            if delta == 0:
                 continue
             price = _get_price_for_date(symbol, date, price_cache)
             if price is None:
                 continue
             traded_value += abs(delta) * price
 
-        prev_value = sum(prev_positions.get(sym, 0) * (_get_price_for_date(sym, prev.get("date"), price_cache) or 0)
-                         for sym in prev_positions if sym != "CASH")
-        prev_value += float(prev_positions.get("CASH", 0))
+        prev_value = 0.0
+        for sym, amount in prev_positions.items():
+            if sym == "CASH":
+                try:
+                    prev_value += float(amount)
+                except (TypeError, ValueError):
+                    continue
+                continue
+
+            price = _get_price_for_date(sym, prev.get("date"), price_cache)
+            if price is None:
+                continue
+            try:
+                prev_value += float(amount) * price
+            except (TypeError, ValueError):
+                continue
 
         if prev_value > 0:
             turnovers.append(traded_value / prev_value)
@@ -222,8 +242,13 @@ def build_performance_report(position_file: Path, price_dir: Path) -> Optional[P
     if not position_records:
         return None
 
-    symbols = [sym for sym in position_records[0].get("positions", {}) if sym != "CASH"]
-    price_cache = _build_price_cache(symbols, price_dir)
+    symbols = set()
+    for record in position_records:
+        for sym in record.get("positions", {}):
+            if sym != "CASH":
+                symbols.add(sym)
+
+    price_cache = _build_price_cache(sorted(symbols), price_dir)
 
     equity_curve, missing_price_days = _compute_equity_curve(position_records, price_cache)
     daily_returns = _compute_daily_returns(equity_curve)
