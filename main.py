@@ -18,6 +18,10 @@ AGENT_REGISTRY = {
         "module": "agent.base_agent.base_agent",
         "class": "BaseAgent"
     },
+    "LiveAgent": {
+        "module": "agent.live_agent.live_agent",
+        "class": "LiveAgent"
+    },
 }
 
 
@@ -375,4 +379,7 @@ if __name__ == "__main__":
         print(f"📄 Using default configuration file: configs/default_config.json")
     
     asyncio.run(main(config_path))
+
+
+
 

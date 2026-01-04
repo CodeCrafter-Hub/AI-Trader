@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-Trader Live Runs</title>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Live Runs</h1>
+    <p>This page reads <code>/data/live_runs.jsonl</code>. Serve the repo root with a local HTTP server.</p>
+
+    <section id="summary">
+      <h2>Latest Summary</h2>
+      <div id="latest-summary">Loading...</div>
+    </section>
+
+    <section id="alerts">
+      <h2>Recent Alerts</h2>
+      <div id="alert-summary">Loading...</div>
+    </section>
+
+    <section id="runs">
+      <h2>Recent Runs</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Time (UTC)</th>
+            <th>Run ID</th>
+            <th>Signature</th>
+            <th>Status</th>
+            <th>Equity</th>
+            <th>Buying Power</th>
+          </tr>
+        </thead>
+        <tbody id="runs-body"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script src="assets/js/live-runs.js"></script>
+</body>
+</html>

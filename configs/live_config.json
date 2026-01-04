@@ -1,0 +1,24 @@
+{
+  "agent_type": "LiveAgent",
+  "date_range": {
+    "init_date": "2025-01-01",
+    "end_date": "2025-01-01"
+  },
+  "models": [
+    {
+      "name": "gpt-5",
+      "basemodel": "openai/gpt-5",
+      "signature": "gpt-5-live",
+      "enabled": true
+    }
+  ],
+  "agent_config": {
+    "max_steps": 10,
+    "max_retries": 2,
+    "base_delay": 1.0,
+    "initial_cash": 10000.0
+  },
+  "log_config": {
+    "log_path": "./data/agent_data"
+  }
+}
